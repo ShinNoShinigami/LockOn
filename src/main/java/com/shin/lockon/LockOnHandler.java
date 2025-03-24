@@ -149,7 +149,7 @@ public class LockOnHandler {
         }
     }
 
-    private static final Predicate<LivingEntity> ENTITY_PREDICATE = entity -> entity instanceof LivingEntity;
+    private static final Predicate<LivingEntity> ENTITY_PREDICATE = entity -> entity instanceof LivingEntity && !entity.isInvisible();
 
     private static int cycle = -1;
 
