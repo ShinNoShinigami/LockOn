@@ -47,8 +47,8 @@ public class LockOn {
                     .comment("Render the lock on icon around the targeted enemy")
                     .define("render_icon", true);
             color = builder
-                    .comment("Color of lock on, #AARRGGBB format")
-                    .define("color","#FFFFFF00");
+                    .comment("Color of lock on, #RRGGBBAA format")
+                    .define("color","#FFFF00FF");
             range = builder
                     .comment("Range at which mobs can be locked on to")
                     .defineInRange("range",16,0,500);

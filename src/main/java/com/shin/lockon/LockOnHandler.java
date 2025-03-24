@@ -41,14 +41,8 @@ public class LockOnHandler {
     public static KeyMapping TAB;
 
     public static List<LivingEntity> list = new ArrayList<>();
+
     private static final Minecraft mc = Minecraft.getInstance();
-
-    private static boolean lockedOn;
-    private static Entity targeted;
-    private static int cycle = -1;
-
-    public static boolean lockY = true;
-    private static final Predicate<LivingEntity> ENTITY_PREDICATE = entity -> entity instanceof LivingEntity && !entity.isInvisible();
 
     public static void client(FMLClientSetupEvent e) {
         EVENT_BUS.addListener(LockOnHandler::logOff);
@@ -62,30 +56,29 @@ public class LockOnHandler {
         e.register(TAB);
     }
 
+
+
     public static void renderWorldLast(Entity entity, PoseStack poseStack, MultiBufferSource buffers, Quaternion quaternion) {
         if (targeted == entity && LockOn.ClientConfig.renderIcons.get()) {
             VertexConsumer builder = buffers.getBuffer(ModRenderType.RENDER_TYPE);
             poseStack.pushPose();
-            poseStack.translate(0, entity.getBbHeight() / 2, 0);
-            poseStack.mulPose(quaternion);
-            poseStack.mulPose(Vector3f.ZP.rotationDegrees(Util.getNanos() / -8_000_000f));
 
-            float w = (float) (double) LockOn.ClientConfig.width.get();
-            float h = (float) (double) LockOn.ClientConfig.height.get();
-            int color = getColorConfig();
+            poseStack.translate(0, entity.getBbHeight()/2, 0);
+
+            poseStack.mulPose(quaternion);
+
+
+            float rotate = (Util.getNanos() /-8_000_000f);
+
+            poseStack.mulPose(Vector3f.ZP.rotationDegrees(rotate));
+
+
+            float w = (float)(double)LockOn.ClientConfig.width.get();float h = (float)(double)LockOn.ClientConfig.height.get();
 
             RenderSystem.disableCull();
-            fillTriangles(builder, poseStack.last().pose(), 0, entity.getBbHeight() / 2f, -w / 2f, h, entity.getBbHeight() / 2f, 0, color);
+            fillTriangle(builder,poseStack.last().pose(),0,entity.getBbHeight() / 2f, -w/2f, h,entity.getBbHeight() / 2f,0);
             poseStack.popPose();
-        }
-    }
-
-    private static int getColorConfig() {
-        try {
-            return Integer.decode(LockOn.ClientConfig.color.get());
-        } catch (NumberFormatException e) {
-            log.error("Error decoding color: ", e);
-            return 0xffffff00;
+            //     RenderSystem.enableCull();
         }
     }
 
@@ -95,12 +88,12 @@ public class LockOnHandler {
                 if (lockedOn) {
                     leaveLockOn();
                 } else {
-                    attemptEnterLockOn(mc.player);
+                    attemptEnterLockOn(Minecraft.getInstance().player);
                 }
             }
 
             while (TAB.consumeClick()) {
-                tabToNextEnemy(mc.player);
+                tabToNextEnemy(Minecraft.getInstance().player);
             }
             tickLockedOn();
         }
@@ -110,52 +103,79 @@ public class LockOnHandler {
         leaveLockOn();
     }
 
-    public static boolean handleKeyPress(Player player, double d2, double d3) {
-        if (player != null && !mc.isPaused() && targeted != null) {
-            Vec3 targetPos = targeted.position().add(0, targeted.getEyeHeight(), 0);
-            Vec3 targetVec = targetPos.subtract(player.position().add(0, player.getEyeHeight(), 0)).normalize();
-            double targetAngleX = Mth.wrapDegrees(Math.atan2(-targetVec.x, targetVec.z) * 180 / Math.PI);
-            double targetAngleY = Math.atan2(targetVec.y, targetVec.horizontalDistance()) * 180 / Math.PI;
-            double toTurnX = Mth.wrapDegrees(player.getYRot() - targetAngleX);
-            double toTurnY = Mth.wrapDegrees(player.getXRot() + targetAngleY);
+    public static boolean lockedOn;
+    private static Entity targeted;
 
-            player.turn(-toTurnX, -toTurnY);
-            return true;
+    public static boolean lockY = true;
+
+    public static boolean handleKeyPress(Player player, double d2, double d3) {
+        if (player != null && !mc.isPaused()) {
+            if (targeted != null) {
+                Vec3 targetPos = targeted.position().add(0,targeted.getEyeHeight(),0);
+                Vec3 targetVec = targetPos.subtract(player.position().add(0,player.getEyeHeight(),0)).normalize();
+                double targetAngleX = Mth.wrapDegrees(Math.atan2(-targetVec.x, targetVec.z) * 180 / Math.PI);
+                double targetAngleY = Math.atan2(targetVec.y , targetVec.horizontalDistance()) * 180 / Math.PI;
+                double xRot = Mth.wrapDegrees(player.getXRot());
+                double yRot = Mth.wrapDegrees(player.getYRot());
+                double toTurnX = Mth.wrapDegrees(yRot - targetAngleX);
+                double toTurnY = Mth.wrapDegrees(xRot + targetAngleY);
+
+                player.turn(-toTurnX,-toTurnY);
+                return true;
+            }
         }
         return false;
     }
 
     private static void attemptEnterLockOn(Player player) {
         tabToNextEnemy(player);
-        lockedOn = targeted != null;
+        if (targeted != null) {
+            lockedOn = true;
+        }
     }
 
     private static void tickLockedOn() {
         list.removeIf(livingEntity -> !livingEntity.isAlive());
         if (targeted != null && !targeted.isAlive()) {
-            leaveLockOn();
+            targeted = null;
+            lockedOn = false;
         }
     }
 
-    public static Entity findNearby(Player player) {
-        int range = LockOn.ClientConfig.range.get();
-        TargetingConditions enemyCondition = TargetingConditions.forCombat().range(range).selector(ENTITY_PREDICATE);
-        List<LivingEntity> entities = player.level
-                .getNearbyEntities(LivingEntity.class, enemyCondition, player, player.getBoundingBox().inflate(range))
-                .stream().filter(player::hasLineOfSight).toList();
+    private static final Predicate<LivingEntity> ENTITY_PREDICATE = entity -> entity instanceof LivingEntity && !entity.isInvisible();
 
+    private static int cycle = -1;
+
+    public static Entity findNearby(Player player) {
+
+        int r = LockOn.ClientConfig.range.get();
+
+        final TargetingConditions ENEMY_CONDITION = TargetingConditions.forCombat().range(r).selector(ENTITY_PREDICATE);
+
+        List<LivingEntity> entities = player.level
+                .getNearbyEntities(LivingEntity.class, ENEMY_CONDITION, player, player.getBoundingBox().inflate(r)).stream().filter(player::hasLineOfSight).toList();
         if (lockedOn) {
             cycle++;
+            for (LivingEntity entity : entities) {
+                if (!list.contains(entity)) {
+                    list.add(entity);
+                    return entity;
+                }
+            }
+
+           //cycle existing entity
             if (cycle >= list.size()) {
                 cycle = 0;
             }
-            return !list.isEmpty() ? list.get(cycle) : null;
-        } else if (!entities.isEmpty()) {
-            LivingEntity first = entities.get(0);
-            list.add(first);
-            return first;
+            return list.get(cycle);
+        } else {
+            if (!entities.isEmpty()) {
+                list.add(entities.get(0));
+                return entities.get(0);
+            } else {
+                return null;
+            }
         }
-        return null;
     }
 
     private static void tabToNextEnemy(Player player) {
@@ -169,26 +189,28 @@ public class LockOnHandler {
     }
 
     public enum Dir {
-        UP, DOWN, LEFT, RIGHT
+        up,down,left,right;
     }
 
-    public static void fillTriangles(VertexConsumer builder, Matrix4f matrix, float x, float y, float width, float height, float bbHeight, float z, int color) {
-        float a = (color >> 24 & 0xff) / 255f;
-        float r = (color >> 16 & 0xff) / 255f;
-        float g = (color >> 8 & 0xff) / 255f;
-        float b = (color & 0xff) / 255f;
+
+    public static void fillTriangle(VertexConsumer builder, Matrix4f matrix4f, float x, float y, float width, float height,float bbHeight, float z) {
+        String colorHex = LockOn.ClientConfig.color.get().substring(1);
+        int r = Integer.valueOf(colorHex.substring(0, 2), 16);
+        int g = Integer.valueOf(colorHex.substring(2, 4), 16);
+        int b = Integer.valueOf(colorHex.substring(4, 6), 16);
+        int a = Integer.valueOf(colorHex.substring(6, 8), 16);
 
         for (Dir dir : Dir.values()) {
-            fillTriangle(builder, matrix, x, y, width, height, bbHeight, z, r, g, b, a, dir);
+            fillTriangle(builder, matrix4f, x, y, width, height, bbHeight, z, r, g, b, a, dir);
         }
     }
 
     public static void fillTriangle(VertexConsumer builder, Matrix4f matrix, float x, float y, float width, float height, float bbHeight, float z, float r, float g, float b, float a, Dir dir) {
         switch (dir) {
-            case UP -> drawTriangle(builder, matrix, x, y, width, height, z, r, g, b, a, 1);
-            case DOWN -> drawTriangle(builder, matrix, x, y, width, -height, z, r, g, b, a, 1);
-            case LEFT -> drawTriangle(builder, matrix, x - bbHeight, y, -height, width, z, r, g, b, a, 0);
-            case RIGHT -> drawTriangle(builder, matrix, x + bbHeight, y, height, width, z, r, g, b, a, 0);
+            case up -> drawTriangle(builder, matrix, x, y, width, height, z, r, g, b, a, 1);
+            case down -> drawTriangle(builder, matrix, x, y, width, -height, z, r, g, b, a, 1);
+            case left -> drawTriangle(builder, matrix, x - bbHeight, y, -height, width, z, r, g, b, a, 0);
+            case right -> drawTriangle(builder, matrix, x + bbHeight, y, height, width, z, r, g, b, a, 0);
         }
     }
 
