@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.shin.lockon.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "lockon.refmap.json",
+  "mixins": [
+  ],
+  "client": [
+    "EntityRenderDispatcherMixin",
+    "MouseHandlerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
